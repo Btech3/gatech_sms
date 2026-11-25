@@ -22,6 +22,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Local Email Verification Bypass
+    |--------------------------------------------------------------------------
+    |
+    | This switch can only permit unverified logins in local/testing. The
+    | environment check prevents a deployment from enabling it in production.
+    |
+    */
+
+    'allow_unverified_login' => in_array(env('APP_ENV', 'production'), ['local', 'testing'], true)
+        && filter_var(env('AUTH_ALLOW_UNVERIFIED_LOGIN', true), FILTER_VALIDATE_BOOLEAN),
+
+    /*
+    |--------------------------------------------------------------------------
     | Authentication Guards
     |--------------------------------------------------------------------------
     |
@@ -96,7 +109,7 @@ return [
         'users' => [
             'provider' => 'users',
             'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
-            'expire' => 60,
+            'expire' => 30,
             'throttle' => 60,
         ],
     ],

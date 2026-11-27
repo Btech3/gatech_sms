@@ -4,12 +4,13 @@ Use fictitious data and a local/test database only. Do not test with production 
 
 ## Before starting
 
-1. Confirm Laravel points to your local MySQL/MariaDB database and not production.
-2. Run pending migrations with `php artisan migrate`.
-3. Keep the local mailer as `log` until a private SMTP configuration is ready.
-4. Start the server and use one consistent origin and port, for example `http://127.0.0.1:8010`.
-5. In a second terminal, start `php artisan queue:work database` so queued verification emails are processed.
-6. Bootstrap CSRF cookies and keep one Postman cookie jar for the test sequence.
+1. Confirm Laravel points to a disposable local MySQL/MariaDB database and not production.
+2. Run `php artisan migrate:status` to see which migrations are pending. The current reviewed database has five pending administration/admissions migrations.
+3. Back up the local database before applying pending migrations. Run `php artisan migrate` only after confirming the target and backup; never run it against production as part of this test guide.
+4. Keep the local mailer as `log` until a private SMTP configuration is ready.
+5. Start the server and use one consistent origin and port, for example `http://127.0.0.1:8010`.
+6. In a second terminal, start `php artisan queue:work database` so queued verification emails are processed.
+7. Bootstrap CSRF cookies and keep one Postman cookie jar for the test sequence.
 
 ## Recommended sequence
 
@@ -25,7 +26,7 @@ Use fictitious data and a local/test database only. Do not test with production 
 10. **Logout:** sign out and verify `/user` returns `401`.
 11. **Idle timeout:** use a fresh login, then wait 30 minutes without calling an authenticated route and verify the next protected request is rejected.
 
-For a complete request-by-request walkthrough, use [API test cases](API_TEST_CASES.md).
+The current MySQL database has five pending migrations and no active, verified user accounts. A successful sign-in test therefore requires a safely migrated local database and a dedicated local test account. For the live Swagger results and remaining blockers, see [Project status and live API verification](PROJECT_STATUS_AND_LIVE_API_VERIFICATION.md). For request-by-request scenarios, use [API test cases](API_TEST_CASES.md).
 
 ## Safe cleanup
 

@@ -1,6 +1,6 @@
 # School Management Portal API
 
-This folder documents the Laravel API currently present in this repository. It covers authentication, role and permission administration, academy setup, system settings, and audit-log APIs. It does not claim that admissions, billing, MFA, or user-administration features already exist.
+This folder documents the Laravel API currently present in this repository: authentication, role and permission administration, academy setup, system settings, audit logs, user invitations/administration, and an admissions workflow foundation. Route definitions and SQLite feature tests do not establish that an operation works against the current local MySQL database; the later administration and admissions migrations are still pending there. MFA and a user-facing school portal are not implemented.
 
 ## Open the interactive documentation
 
@@ -24,7 +24,7 @@ Swagger UI loads its pinned assets from a public CDN, so the browser needs inter
 
 The current implementation uses Sanctum's first-party session cookies. Login returns a public user resource and sets browser-managed cookies; it does **not** return a bearer access token. Call the CSRF-cookie endpoint before state-changing calls. Swagger UI handles the CSRF cookie/header in the browser; Postman instructions are in [the beginner guide](../testing/POSTMAN_BEGINNER_GUIDE.md).
 
-Protected authentication operations require the logged-in session. Administrative APIs enforce their respective permission keys on the backend. Campus assignments are enforced for campus, room, intake, and holiday APIs. The first System Administrator is assigned to an existing active, verified account using the CLI-only `app:bootstrap-system-administrator` command; public registration cannot assign roles. MFA, user-role administration, and admissions are not implemented yet. See [authentication details](authentication.md).
+Protected authentication operations require the logged-in session. Administrative APIs enforce their respective permission keys on the backend. Campus assignments are enforced for campus, room, intake, holiday, user, and admissions access where applicable. The first System Administrator is assigned to an existing active, verified account using the CLI-only `app:bootstrap-system-administrator` command; public registration cannot assign roles. MFA and the portal UI are not implemented. See [authentication details](authentication.md) and the [project status and live API verification report](../testing/PROJECT_STATUS_AND_LIVE_API_VERIFICATION.md).
 
 ## Versioning and base URL
 
@@ -37,4 +37,4 @@ Business API paths currently use `/api/v1/auth`. The OpenAPI server is relative 
 - [Beginner testing guide](../testing/POSTMAN_BEGINNER_GUIDE.md)
 - [Swagger UI usage](swagger-usage.md)
 - [OpenAPI 3.1 specification](openapi.yaml)
-- [Beginner testing guides](../testing/POSTMAN_BEGINNER_GUIDE.md)
+- [Project status and live API verification](../testing/PROJECT_STATUS_AND_LIVE_API_VERIFICATION.md)

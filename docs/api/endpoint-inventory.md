@@ -1,6 +1,6 @@
 # Endpoint inventory
 
-This inventory was checked against Laravel's registered route table and the route/controller implementation. Route count refers to the `route:list` rows: `GET|HEAD` is one route entry.
+This inventory was checked against Laravel's registered route table and the route/controller implementation. The application currently registers 68 versioned API operations; the Swagger document contains the same 68 operations. The full route table contains 75 rows, including seven web, documentation, health, storage, or development-tool routes. These counts describe registered code, not successful execution against the configured database. The current MySQL database is missing the RBAC, academy setup, user-campus, invitation, and admissions migrations. See the [live verification report](../testing/PROJECT_STATUS_AND_LIVE_API_VERIFICATION.md).
 
 ## Versioned authentication API
 
@@ -102,7 +102,7 @@ Protected administrator APIs reject public role assignment to the bootstrap role
 
 Laravel's registered route count is tracked separately from the versioned business endpoints. The following are web, framework, or tooling routes, not versioned business API operations:
 
-The current route table contains 58 entries: 51 versioned API routes and 7 web, framework, documentation, or development-tool routes.
+The current route table contains 75 entries: 68 versioned API operations and 7 web, framework, documentation, or development-tool routes.
 
 | Route | Owner | Purpose / documentation status |
 |---|---|---|
@@ -124,6 +124,6 @@ The current route table contains 58 entries: 51 versioned API routes and 7 web, 
 - Production HTTP requests are rejected with `400`; use HTTPS in production.
 - Administrative lists default to 50 records per page. Audit logs support user, module, action, entity, and date filters with 25/50/100 page sizes.
 
-Not implemented in this repository yet: user invitations and administration (ADN-001), public admissions (ADM-001–010), responsive portal UI (XCT-002), and MFA. Legacy import and operational backup/encryption guarantees require source data and deployment decisions.
+User invitations and administration, and the admissions workflow, have route/controller foundations and SQLite feature tests, but their migrations have not been applied to the configured MySQL database. Public admissions is disabled by default. Not implemented in this repository: a responsive portal UI (XCT-002), MFA, and a legacy-data import process (XCT-004). Operational backup, encryption, privacy, and retention guarantees require deployment configuration and verification. The automated test suite does not yet carry all workbook test-case IDs; see the [project status report](../testing/PROJECT_STATUS_AND_LIVE_API_VERIFICATION.md).
 
 See the [OpenAPI specification](openapi.yaml) for request schemas and response examples.

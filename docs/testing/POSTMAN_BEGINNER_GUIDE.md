@@ -43,6 +43,8 @@ This guide uses the API that exists today: a session cookie, not an access token
    ```
 
    Leave this PowerShell window open while testing.
+
+   Before testing administration or admissions, run `php artisan migrate:status`. The current local MySQL database has five pending application migrations; do not apply them until you have confirmed the database is disposable/development-only and backed it up. The full, current status and live Swagger results are in [Project status and live API verification](PROJECT_STATUS_AND_LIVE_API_VERIFICATION.md).
 9. Open a second PowerShell window in the project directory and run `php artisan queue:work database`. Leave it open while testing registration so queued verification mail is processed. The default local `log` mailer records the message; it does not send mail to an inbox.
 10. For each request, use `{{base_url}}` at the start of the URL. Save it into the collection with **Save**.
 
@@ -86,6 +88,19 @@ There is **no access token** returned by login. Keep using the same Postman cook
 6. Logout, then confirm the current-user endpoint returns `401`.
 
 Do not put a session cookie into `Authorization: Bearer ...`; that is not this application's login flow.
+
+## Swagger verification already performed
+
+The local Swagger UI at `http://127.0.0.1:8010/docs/api` was used to make the following requests:
+
+| Request | Expected result | Observed result |
+|---|---|---|
+| `GET /api/v1/auth/csrf-cookie` | `204`; browser-managed XSRF and session cookies | `204`; both cookie names were present |
+| `GET /api/v1/auth/user` without login | `401` | `401`, `Unauthenticated.` |
+| `POST /api/v1/auth/register` with `{}` | `422` with required-field errors | `422` with all five required fields reported |
+| `POST /api/v1/auth/admissions/applications` with `{}` | Validation failure; no application created | `422` with required-field errors; this was not a successful submission |
+
+`GET /up` returned `200`, and Swagger loaded all 68 documented API operations. These are live local HTTP results, not SQLite test results. A valid login and successful business-data operation were not tested: no active, email-verified local account with known test credentials exists, and the administration/admissions tables are missing from MySQL. The invalid requests above do not create accounts or applications.
 
 ## Phase A: test roles and permissions
 
@@ -223,7 +238,7 @@ These steps use the same authenticated Postman session as the role tests. The AP
 11. **Search audit logs:** send `GET {{base_url}}/api/v1/admin/audit-logs?entity_type=student&entity_id=456`. You can also filter by `user_id`, `module`, `action`, `from`, and `to`; `per_page` can be 25, 50, or 100.
 12. **Export audit logs:** send `GET {{base_url}}/api/v1/admin/audit-logs/export` with the same filters. Expect a CSV download. The export itself is audited. Try `DELETE {{base_url}}/api/v1/admin/audit-logs/{id}`; it returns `405`, logs the attempt, and keeps the original row.
 
-The backend has no responsive portal UI, applicant/student workflow, or production payment workflow in this repository yet. These manual API steps do not verify those frontend or operational acceptance criteria.
+The repository includes an admissions API foundation and related student/enrollment models, but there is no applicant/student portal UI or production payment workflow. Admissions success flows were tested only on SQLite; the current MySQL database is missing the required migrations. These manual setup steps do not verify frontend or operational acceptance criteria.
 
 ## Troubleshooting
 

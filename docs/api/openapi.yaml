@@ -8,8 +8,11 @@ info:
     not issue a bearer token. Role and permission management are available through
     protected administration endpoints. The initial System Administrator is
     assigned only through the controlled Artisan bootstrap command. Campus
-    assignments are enforced for campus, room, intake, and holiday administration. User
-    administration, admissions, and MFA are not implemented yet.
+    assignments are enforced for campus, room, intake, holiday, user, and
+    admissions access where applicable. User-administration and admissions
+    operations are defined, but the corresponding migrations must be applied
+    before they can run against the configured MySQL database. MFA and a
+    user-facing portal UI are not implemented.
 servers:
   - url: /
     description: Current host and scheme used to open Swagger UI
@@ -26,6 +29,10 @@ tags:
     description: Signed verification of a pending new email address
   - name: Administration
     description: Protected roles, permissions, academy setup, settings, and audit APIs
+  - name: Users
+    description: Protected user administration and invitation management
+  - name: Admissions
+    description: Application review, decisions, admission, withdrawal, and optional public submission
 paths:
   /api/v1/admin/roles:
     get:

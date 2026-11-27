@@ -2,6 +2,8 @@
 
 Use the same host, cookie jar, `Accept: application/json`, configured `Origin`, and CSRF setup described in the [Postman beginner guide](POSTMAN_BEGINNER_GUIDE.md). Examples use fictional `example.test` emails and local-only passwords.
 
+> **Coverage boundary:** This file does not yet contain every workbook test case. The suite currently tags 21 of the 48 expected ADN/XCT/ADM positive and negative IDs; no XCT IDs and only three ADM IDs are tagged. Do not mark unlisted workbook cases as passed. The configured local MySQL database also lacks the administration/admissions migrations, so the admissions workflow below is a documented procedure, not a live MySQL test. See the [project status report](PROJECT_STATUS_AND_LIVE_API_VERIFICATION.md).
+
 | ID | Endpoint and purpose | Prerequisite / request | Success | Useful failure test |
 |---|---|---|---|---|
 | TC-API-001 | `GET /api/v1/auth/csrf-cookie` — start cookie session | No account required. Send GET. | `204`, blank body; cookies appear in Postman. | In production over HTTP, expect `400` secure-transport response. |
@@ -28,6 +30,34 @@ Before using these endpoints, an operator must run the CLI bootstrap command for
 | TC-ADN-002-N | `DELETE /api/v1/admin/roles/{role}` — protect a role in use | Assign the role to at least one user, then send DELETE. | Not a success case: expect `409` and a message containing the assigned-user count; role remains. | Try deleting an unassigned built-in role; expect `409`. |
 | TC-ADN-003-P | `PUT /api/v1/admin/roles/{role}/permissions` — remove `Payments.Record` | As System Administrator, replace Finance Officer permissions with its current list excluding `Payments.Record`. | `200`; matrix reports `Payments.Record` as `granted: false`. Requests to a route protected by that permission return `403`. | Try to grant a permission the actor does not hold; expect `403` and an audit event. There is not yet a production payments route; the feature test exercises the middleware on a test-only route. |
 | TC-ADN-003-N | `PUT /api/v1/admin/roles/{role}/permissions` — prevent privilege escalation | Sign in as `Registrar / Admissions Officer` and attempt to update Finance Officer permissions. | `403`; matrix is unchanged and the denied attempt is recorded in `audit_logs`. | As a limited permission manager, try granting a permission not held by the actor; expect `403` and an audit event. |
+
+## Admissions workflow (SQLite feature tests; MySQL workflow not yet verified)
+
+Run these steps only after the admissions migrations have been safely applied to a local development database and a dedicated account has the required admissions permissions. Keep the same authenticated session and CSRF header. Prepare an open intake with available capacity first; the API does not include course-management endpoints, so use an existing course/intake configuration where required.
+
+1. **Create and submit an application:** `POST /api/v1/admin/applications` with:
+
+   ```json
+   {
+     "intake_id": 1,
+     "first_name": "Ada",
+     "last_name": "Lovelace",
+     "email": "ada-applicant@example.test",
+     "submit": true
+   }
+   ```
+
+   Replace `1` with the ID of an open intake that has an associated course and available capacity. Expect `201`, `data.status` equal to `submitted`, an `APP-` application number, and `duplicate_applicant_warning`.
+2. **Read the application:** `GET /api/v1/admin/applications/{application_id}`. Expect applicant details and status history. This requires `Admissions.View`.
+3. **Start review:** `POST /api/v1/admin/applications/{application_id}/review` with `{"notes":"Eligibility checked"}`. Expect `200` and `data.status` equal to `under_review`.
+4. **Accept:** `POST /api/v1/admin/applications/{application_id}/decision` with `{"decision":"accept"}`. Expect `200` and `data.status` equal to `accepted` if the intake still has capacity. A full intake must reject acceptance with `422`.
+5. **Admit:** `POST /api/v1/admin/applications/{application_id}/admit` with an empty body. Expect `200`, `data.status` equal to `admitted`, and `student_id`, `student_number`, and `letter_number`. Confirm the student, enrollment, and admission-letter records exist.
+6. **Test rejection on a separate under-review application:** send `{"decision":"reject","reason":"Eligibility requirements were not met"}` to the decision endpoint. Expect `200` and `rejected`; omitting the reason must produce `422`.
+7. **Test waitlisting on a separate under-review application:** send `{"decision":"waitlist","waitlist_expires_at":"2027-01-30 12:00:00"}`. Expect `200`, `waitlisted`, and a queue position. `POST /api/v1/admin/applications/{application_id}/waitlist/promote` promotes the next eligible entry when capacity becomes available.
+8. **Withdraw a separate eligible application:** `POST /api/v1/admin/applications/{application_id}/withdraw` with `{"reason":"Applicant changed plans"}`. Expect `200`, `withdrawn`, and a withdrawal timestamp.
+9. **Check public submission:** `POST /api/v1/auth/admissions/applications` is disabled by default and should return `404` once a valid request reaches the controller. An empty body currently returns `422` first because request validation runs before the controller feature-flag check. Do not enable public submission without the configured CAPTCHA and legal-policy integrations.
+
+The current SQLite feature tests exercise create/review/accept/admit, waitlist/withdrawal, capacity/rejection validation, and the public flag. Only `TC-ADM-001-P`, `TC-ADM-002-P`, and `TC-ADM-004-N` are explicitly attached as workbook groups. None of these admissions success steps was executed against the current MySQL database.
 
 ## Uploading a profile photo
 

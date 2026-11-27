@@ -32,7 +32,7 @@ The backend does not contain a user-facing reset form at `FRONTEND_URL/reset-pas
 2. Wait 30 minutes without making authenticated requests; the next protected request should return `401` and clear the session.
 3. Logout invalidates the shared server-side session, so tabs reusing that cookie should also lose access.
 
-**MFA and the five-incorrect-code lockout are not implemented.** There is no MFA endpoint to test. Role-based MFA depends on an approved role/permission design and is out of current scope.
+**MFA and the five-incorrect-code lockout are not implemented.** There is no MFA endpoint to test. The role and permission foundation exists, but MFA enforcement for sensitive roles still needs to be built and verified.
 
 ## AUTH-004 — Profile, password change, and logout
 
@@ -45,4 +45,4 @@ The backend does not contain a user-facing reset form at `FRONTEND_URL/reset-pas
 
 ## Automated coverage snapshot
 
-The auth feature test files cover login and lockout, registration and validation, verification queue success/failure, verification links, password reset expiry/reuse/session invalidation, profile/photo/email change, password update, CSRF bootstrap, idle timeout, and logout. The latest full suite run recorded **56 passing tests and 287 assertions**. There is no automated Swagger UI browser test or MFA test.
+The auth feature test files cover login and lockout, registration and validation, verification queue success/failure, verification links, password reset expiry/reuse/session invalidation, profile/photo/email change, password update, CSRF bootstrap, idle timeout, and logout. The latest full suite run recorded **93 passing tests and 535 assertions** across the configured SQLite test database. Swagger was also checked manually against the local server; see the [live verification report](PROJECT_STATUS_AND_LIVE_API_VERIFICATION.md). There is no automated Swagger UI browser test or MFA test.

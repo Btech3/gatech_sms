@@ -51,7 +51,7 @@ The application now stores roles, permissions, role assignments, and audit event
 
 The approved workbook mapping seeds `Admin` as **Academy Administrator** and `Registrar` as **Registrar / Admissions Officer**. Instructor, Finance Officer, and Academy Head retain their persona names. System Administrator is a separate reserved role; it is never assignable through registration or the role API. Use the CLI-only `php artisan app:bootstrap-system-administrator <email>` command to assign it to one existing active, verified account. The command seeds the default role and permission catalogue and refuses to run again after an administrator has been bootstrapped.
 
-There is no frontend in this repository, so the role-driven navigation UI is not implemented. User-role administration, campus scoping, object-level data boundaries, and the full ADN-009 audit-log search/retention interface remain for later phases. The audit table currently records role and permission changes plus denied authorization attempts.
+There is no frontend in this repository, so the role-driven navigation UI is not implemented. User administration, campus assignment checks, and audit-log search/export routes exist in code and have SQLite feature coverage, but their required migrations are pending in the configured MySQL database. The audit implementation records role and permission changes plus denied authorization attempts; verify retention and deployment controls separately. See the [project status and live API verification report](../testing/PROJECT_STATUS_AND_LIVE_API_VERIFICATION.md) for what was actually checked against the local server.
 
 ## Email delivery and testing
 

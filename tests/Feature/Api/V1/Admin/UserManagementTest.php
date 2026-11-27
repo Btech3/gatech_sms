@@ -52,12 +52,11 @@ class UserManagementTest extends TestCase
             'email_verified_at' => null,
         ]);
 
-        $this->actingAs($user, 'web')
-            ->postJson('/api/v1/auth/invitations/accept', [
-                'token' => $this->plaintextTokenFor($invitation),
-                'password' => 'StrongPass123',
-                'password_confirmation' => 'StrongPass123',
-            ])
+        $this->postJson('/api/v1/auth/invitations/accept', [
+            'token' => $this->plaintextTokenFor($invitation),
+            'password' => 'StrongPass123',
+            'password_confirmation' => 'StrongPass123',
+        ])
             ->assertOk();
 
         $this->assertDatabaseHas('users', [

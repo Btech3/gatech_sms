@@ -17,7 +17,13 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
 
 #[Fillable(['name', 'first_name', 'last_name', 'email', 'password', 'phone'])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden([
+    'password',
+    'remember_token',
+    'mfa_secret',
+    'mfa_pending_secret',
+    'mfa_recovery_code_hashes',
+])]
 class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
@@ -36,6 +42,14 @@ class User extends Authenticatable implements MustVerifyEmail
             'is_active' => 'boolean',
             'failed_login_attempts' => 'integer',
             'locked_until' => 'datetime',
+            'mfa_secret' => 'encrypted',
+            'mfa_enabled_at' => 'datetime',
+            'mfa_pending_secret' => 'encrypted',
+            'mfa_pending_expires_at' => 'datetime',
+            'mfa_last_used_timestep' => 'integer',
+            'mfa_failed_attempts' => 'integer',
+            'mfa_locked_until' => 'datetime',
+            'mfa_recovery_code_hashes' => 'encrypted:array',
         ];
     }
 
@@ -82,6 +96,13 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isBootstrapAdministrator(): bool
     {
         return $this->roles()->where('roles.is_bootstrap', true)->exists();
+    }
+
+    public function hasMfaEnabled(): bool
+    {
+        return $this->mfa_enabled_at !== null
+            && is_string($this->mfa_secret)
+            && $this->mfa_secret !== '';
     }
 
     public function sendEmailVerificationNotification(): void

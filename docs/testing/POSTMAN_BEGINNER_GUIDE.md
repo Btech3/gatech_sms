@@ -89,6 +89,22 @@ There is **no access token** returned by login. Keep using the same Postman cook
 
 Do not put a session cookie into `Authorization: Bearer ...`; that is not this application's login flow.
 
+## Testing authenticator-app MFA
+
+This flow applies to accounts assigned a configured sensitive role. Use a dedicated test account only; never use production credentials or share MFA secrets, recovery codes, or session cookies.
+
+1. Request `GET {{base_url}}/api/v1/auth/csrf-cookie`.
+2. Log in using `POST {{base_url}}/api/v1/auth/login`. Expect `202` and `data.enrollment_required: true` for a first-time MFA user. Postman must keep the session cookie from this same host.
+3. Send `POST {{base_url}}/api/v1/auth/mfa/enrollment/start` with **Body → raw → JSON** and `{}`. Expect `200`; the response contains a setup secret and an `otpauth://` URI that expires with the five-minute challenge.
+4. On your phone, open an authenticator app (for example, Microsoft Authenticator, Google Authenticator, or another TOTP-compatible app). Choose the manual setup-key option and enter the returned secret. Do not save the secret in the Postman collection.
+5. Send `POST {{base_url}}/api/v1/auth/mfa/enrollment/confirm` with `{"code":"123456"}`, replacing the sample with the current six-digit code from the app. Expect `200`. The response shows eight one-time recovery codes; store them in an approved password manager. They will not be returned again.
+6. Send `POST {{base_url}}/api/v1/auth/logout`, then log in again. Expect `202` with `data.enrollment_required: false`.
+7. Send `POST {{base_url}}/api/v1/auth/mfa/verify` with the current six-digit code. Expect `200`, then send `GET {{base_url}}/api/v1/auth/user`; expect `200`.
+8. If you have lost access to the authenticator, start a fresh login challenge and send one unused recovery code to `POST {{base_url}}/api/v1/auth/mfa/recovery`. Expect `200`; a second use of the same code must return `422`.
+9. An invalid or replayed authenticator code returns `422`. Five invalid codes lock the account for 15 minutes (`429`, `Retry-After: 900`). A challenge expires after five minutes; log in again to create a new one.
+
+For every POST, keep the same cookie jar and send the current decoded `XSRF-TOKEN` cookie as `X-XSRF-TOKEN`. Do not export or share a Postman collection containing cookies, MFA setup secrets, or recovery codes.
+
 ## Swagger verification already performed
 
 The local Swagger UI at `http://127.0.0.1:8010/docs/api` was used to make the following requests:
@@ -98,9 +114,9 @@ The local Swagger UI at `http://127.0.0.1:8010/docs/api` was used to make the fo
 | `GET /api/v1/auth/csrf-cookie` | `204`; browser-managed XSRF and session cookies | `204`; both cookie names were present |
 | `GET /api/v1/auth/user` without login | `401` | `401`, `Unauthenticated.` |
 | `POST /api/v1/auth/register` with `{}` | `422` with required-field errors | `422` with all five required fields reported |
-| `POST /api/v1/auth/admissions/applications` with `{}` | Validation failure; no application created | `422` with required-field errors; this was not a successful submission |
+| `POST /api/v1/auth/admissions/applications` with `{}` | `404` while public admissions are disabled; no application created | The earlier live check returned `422` before the middleware fix. The new SQLite regression test confirms the disabled gate returns `404` before validation; live HTTP has not yet been rechecked. |
 
-`GET /up` returned `200`, and Swagger loaded all 68 documented API operations. These are live local HTTP results, not SQLite test results. A valid login and successful business-data operation were not tested: no active, email-verified local account with known test credentials exists, and the administration/admissions tables are missing from MySQL. The invalid requests above do not create accounts or applications.
+At the time of the earlier live check, `GET /up` returned `200` and Swagger loaded 68 documented API operations. The current route table and OpenAPI specification now include 72 operations after adding four MFA endpoints, but those changes have not been retested in the live Swagger UI. These earlier results are live local HTTP results, not SQLite test results. A valid login and successful business-data operation were not tested: no active, email-verified local account with known test credentials exists, and the administration/admissions tables are missing from the previously inspected MySQL schema. The invalid requests above do not create accounts or applications.
 
 ## Phase A: test roles and permissions
 

@@ -7,9 +7,9 @@ This guide maps AUTH-001 through AUTH-004 to the actual code and API tests. It d
 1. Start `php artisan queue:work database` in a second terminal for verification notifications.
 2. Create an account with `POST /api/v1/auth/register`.
 3. Confirm `201`, public user data, and no password/hash/token/role fields. The response means the verification email was queued, not delivered.
-4. In `APP_ENV=local` or `testing`, the configured verification bypass can allow this account to sign in before email verification. Login does not mark the record verified or active.
-5. Send `POST /api/v1/auth/login`. A successful response is `200` and sets a session cookie; it does not return an access token.
-6. Send `GET /api/v1/auth/user` using the same cookie jar.
+4. In `APP_ENV=local` or `testing`, the configured verification bypass can allow a normal account to sign in before email verification. Login does not mark the record verified or active. A sensitive-role account must still have a verified email to complete its MFA challenge.
+5. Send `POST /api/v1/auth/login`. A normal account receives `200`; an account with a configured MFA-required role receives `202` and must complete MFA before it has an authenticated session. Login does not return an access token.
+6. For a sensitive role, complete the MFA steps below. For a normal role, send `GET /api/v1/auth/user` using the same cookie jar.
 7. Try an unknown email, wrong password, a disabled account, and a locked account. Invalid credentials are generic; after five failures the lock lasts 15 minutes and returns `429` with `Retry-After`.
 8. In production, the local unverified-account bypass is unavailable; HTTPS is also required.
 
@@ -32,7 +32,22 @@ The backend does not contain a user-facing reset form at `FRONTEND_URL/reset-pas
 2. Wait 30 minutes without making authenticated requests; the next protected request should return `401` and clear the session.
 3. Logout invalidates the shared server-side session, so tabs reusing that cookie should also lose access.
 
-**MFA and the five-incorrect-code lockout are not implemented.** There is no MFA endpoint to test. The role and permission foundation exists, but MFA enforcement for sensitive roles still needs to be built and verified.
+### Authenticator-app TOTP
+
+The configured sensitive roles are `System Administrator`, `Academy Administrator`, `Registrar / Admissions Officer`, `Finance Officer`, and `Academy Head`. The list can be changed through `AUTH_MFA_REQUIRED_ROLES`; this is server configuration, not a public request field.
+
+1. Prepare a dedicated, active, verified test account with one of those roles. Bootstrap or assign roles only through the approved administrator process. Do not use a production account or share its password.
+2. Bootstrap CSRF and log in. Expect `202` with `data.enrollment_required: true`, not an authenticated user profile.
+3. Keep the same Postman cookie jar. Send `POST /api/v1/auth/mfa/enrollment/start` with an empty JSON object. Expect `200` with a secret, `otpauth://` provisioning URI, and an expiry about five minutes away.
+4. In an authenticator app, choose **enter setup key manually** and enter the returned secret. Do not paste the secret or provisioning URI into tickets, chat, logs, or screenshots.
+5. Send `POST /api/v1/auth/mfa/enrollment/confirm` with `{"code":"123456"}`, replacing the example with the current six-digit code from the authenticator. Expect `200`, the public user profile, and eight one-time `recovery_codes`. Store these securely; they are not returned again.
+6. Send `POST /api/v1/auth/logout`, then log in again. Expect `202` with `data.enrollment_required: false`.
+7. Send `POST /api/v1/auth/mfa/verify` with the current authenticator code. Expect `200`, then confirm `GET /api/v1/auth/user` returns `200` in the same cookie session.
+8. A used TOTP time step cannot be replayed. A malformed or invalid code returns `422`; five invalid codes lock the account for 15 minutes and return `429` with `Retry-After: 900`.
+9. To test recovery, start a new login challenge and send one unused 32-character recovery code to `POST /api/v1/auth/mfa/recovery`. Expect `200`; the same recovery code must then fail with `422`.
+10. A challenge expires after five minutes. Start a new password login if an enrollment or verification request returns `401`.
+
+The same cookie and CSRF requirements apply to these state-changing endpoints. Never enable privileged production access until the MFA migration has been reviewed and applied to the intended database and the enrollment, recovery, replay, and lockout workflow has passed in staging.
 
 ## AUTH-004 — Profile, password change, and logout
 
@@ -45,4 +60,4 @@ The backend does not contain a user-facing reset form at `FRONTEND_URL/reset-pas
 
 ## Automated coverage snapshot
 
-The auth feature test files cover login and lockout, registration and validation, verification queue success/failure, verification links, password reset expiry/reuse/session invalidation, profile/photo/email change, password update, CSRF bootstrap, idle timeout, and logout. The latest full suite run recorded **93 passing tests and 535 assertions** across the configured SQLite test database. Swagger was also checked manually against the local server; see the [live verification report](PROJECT_STATUS_AND_LIVE_API_VERIFICATION.md). There is no automated Swagger UI browser test or MFA test.
+The authentication feature tests cover login and lockout, registration and validation, verification queue success/failure, verification links, password reset expiry/reuse/session invalidation, profile/photo/email change, password update, CSRF bootstrap, idle timeout, logout, TOTP enrollment and verification, replay prevention, one-time recovery codes, and MFA lockout. Test counts must be taken from the latest completed full-suite run in the [live verification report](PROJECT_STATUS_AND_LIVE_API_VERIFICATION.md); these are SQLite automated results, not proof of a live MySQL deployment. There is no automated Swagger UI browser test.

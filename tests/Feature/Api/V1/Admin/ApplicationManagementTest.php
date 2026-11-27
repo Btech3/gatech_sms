@@ -140,6 +140,16 @@ class ApplicationManagementTest extends TestCase
             ->assertNotFound();
     }
 
+    public function test_returns_404_for_empty_payload_when_public_admissions_are_disabled(): void
+    {
+        config(['app.admissions_public_enabled' => false]);
+
+        $this->postJson('/api/v1/auth/admissions/applications')
+            ->assertNotFound();
+
+        $this->assertDatabaseCount('applications', 0);
+    }
+
     public function test_waitlist_and_withdrawal_work_in_controlled_state_transitions(): void
     {
         $this->seed(RolePermissionSeeder::class);

@@ -11,14 +11,18 @@ info:
     assignments are enforced for campus, room, intake, holiday, user, and
     admissions access where applicable. User-administration and admissions
     operations are defined, but the corresponding migrations must be applied
-    before they can run against the configured MySQL database. MFA and a
-    user-facing portal UI are not implemented.
+    before they can run against the configured MySQL database. Sensitive roles
+    require authenticator-app TOTP MFA; the MFA migration and live database
+    deployment have not yet been applied or verified. A user-facing portal UI
+    is not implemented.
 servers:
   - url: /
     description: Current host and scheme used to open Swagger UI
 tags:
   - name: Session
     description: CSRF bootstrap, login, current identity, and logout
+  - name: MFA
+    description: TOTP enrollment, login challenges, and one-time recovery codes
   - name: Registration
     description: Public account creation and email verification
   - name: Password recovery
@@ -1134,6 +1138,8 @@ paths:
         public user resource. It does not return an access token. In local and
         testing environments, the configured verification bypass may permit an
         unverified account; production still requires email verification.
+        Accounts assigned a configured MFA-required role receive `202` and a
+        short-lived MFA challenge instead of an authenticated session.
       parameters:
         - $ref: '#/components/parameters/XsrfHeader'
       requestBody:
@@ -1167,6 +1173,33 @@ paths:
                   phone: null
                   profile_photo_url: null
                   email_change_pending: false
+        '202':
+          description: Password accepted; complete the short-lived MFA challenge using the same session cookie.
+          headers:
+            Set-Cookie:
+              description: Browser-managed challenge session cookie. No bearer token is returned.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store, private
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaChallengeEnvelope'
+              example:
+                message: Multi-factor authentication is required.
+                data:
+                  enrollment_required: true
+        '401':
+          description: The request did not establish a first-party session cookie.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: A first-party session is required.
         '422':
           description: Invalid credentials, unverified account outside local/testing, or invalid input.
           content:
@@ -1178,6 +1211,169 @@ paths:
                 status: false
         '429':
           $ref: '#/components/responses/RateLimited'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/mfa/enrollment/start:
+    post:
+      tags: [MFA]
+      operationId: startMfaEnrollment
+      summary: Start TOTP enrollment for the current login challenge
+      description: >-
+        Requires the short-lived session created by a password login with
+        `enrollment_required: true`. The returned secret is sensitive and should
+        only be entered into the user's authenticator app.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '200':
+          description: TOTP setup details. The secret expires with the five-minute challenge.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store, private
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaEnrollmentEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/mfa/enrollment/confirm:
+    post:
+      tags: [MFA]
+      operationId: confirmMfaEnrollment
+      summary: Confirm TOTP enrollment and complete sign-in
+      description: Submit the current six-digit authenticator code. On success, the session is authenticated and eight one-time recovery codes are returned; store them securely because they are not shown again.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCodeRequest'
+            example:
+              code: '123456'
+      responses:
+        '200':
+          description: MFA enabled and the session authenticated.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store, private
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaEnrollmentCompleteEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          description: Invalid or expired enrollment code, or invalid request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/mfa/verify:
+    post:
+      tags: [MFA]
+      operationId: verifyMfaChallenge
+      summary: Complete an existing MFA login challenge
+      description: Requires the challenge session returned by password login. A TOTP timestep can only be used once; five invalid codes lock the account for 15 minutes.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCodeRequest'
+            example:
+              code: '123456'
+      responses:
+        '200':
+          description: MFA verified; the session is authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          description: Invalid or replayed code, or invalid request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginError'
+        '429':
+          description: MFA lockout or request rate limit. Check `Retry-After`.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginError'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/mfa/recovery:
+    post:
+      tags: [MFA]
+      operationId: verifyMfaRecoveryCode
+      summary: Complete an MFA challenge with a recovery code
+      description: Each recovery code is one-time use. A successful response removes the submitted code from the account.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaRecoveryCodeRequest'
+            example:
+              code: 'A1B2C3D4E5F6G7H8J9K0M1N2P3Q4R5S6'
+      responses:
+        '200':
+          description: Recovery code accepted; the session is authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          description: Invalid or already-used recovery code, or invalid request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginError'
+        '429':
+          description: MFA lockout or request rate limit. Check `Retry-After`.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginError'
         '400':
           $ref: '#/components/responses/SecureTransportRequired'
   /api/v1/auth/user:
@@ -2354,6 +2550,70 @@ components:
         password:
           type: string
           maxLength: 255
+    MfaChallengeEnvelope:
+      type: object
+      required: [message, data]
+      properties:
+        message:
+          type: string
+          example: Multi-factor authentication is required.
+        data:
+          type: object
+          required: [enrollment_required]
+          properties:
+            enrollment_required:
+              type: boolean
+              description: True only for the first sign-in that must enroll TOTP.
+    MfaEnrollmentEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [secret, provisioning_uri, expires_at]
+          properties:
+            secret:
+              type: string
+              description: Sensitive TOTP setup secret. Never share or log it.
+              example: JBSWY3DPEHPK3PXP
+            provisioning_uri:
+              type: string
+              format: uri
+              description: Authenticator-app URI containing the sensitive TOTP secret.
+              example: otpauth://totp/School%20Management%20Portal%3Aada%40example.test?secret=JBSWY3DPEHPK3PXP&issuer=School%20Management%20Portal
+            expires_at:
+              type: string
+              format: date-time
+    MfaCodeRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          pattern: '^\d{6}$'
+          example: '123456'
+    MfaRecoveryCodeRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          pattern: '^[A-Za-z0-9]{32}$'
+          example: A1B2C3D4E5F6G7H8J9K0M1N2P3Q4R5S6
+    MfaEnrollmentCompleteEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/UserEnvelope'
+        - type: object
+          required: [recovery_codes]
+          properties:
+            recovery_codes:
+              type: array
+              description: Eight one-time codes, returned only at enrollment.
+              minItems: 8
+              maxItems: 8
+              items:
+                type: string
+                pattern: '^[A-Za-z0-9]{32}$'
     EmailRequest:
       type: object
       required: [email]

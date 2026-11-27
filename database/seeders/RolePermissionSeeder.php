@@ -173,10 +173,7 @@ class RolePermissionSeeder extends Seeder
                 ->where('is_bootstrap', true)
                 ->firstOrFail();
             $systemAdministratorPermissions = Permission::query()
-                ->where(function ($query): void {
-                    $query->whereNotIn('module', ['Payments', 'Invoices', 'Finance', 'Refunds', 'Discounts'])
-                        ->orWhere('action', '!=', 'Approve');
-                })
+                ->whereNotIn('module', ['Payments', 'Invoices', 'Finance', 'Refunds', 'Discounts'])
                 ->pluck('id')
                 ->all();
             $systemAdministrator->permissions()->sync($systemAdministratorPermissions);

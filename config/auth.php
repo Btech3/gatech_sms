@@ -33,6 +33,21 @@ return [
     'allow_unverified_login' => in_array(env('APP_ENV', 'production'), ['local', 'testing'], true)
         && filter_var(env('AUTH_ALLOW_UNVERIFIED_LOGIN', true), FILTER_VALIDATE_BOOLEAN),
 
+    'mfa' => [
+        'required_roles' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env(
+                'AUTH_MFA_REQUIRED_ROLES',
+                'System Administrator,Academy Administrator,Registrar / Admissions Officer,Finance Officer,Academy Head',
+            )),
+        ))),
+        'challenge_minutes' => 5,
+        'lockout_minutes' => 15,
+        'totp_period_seconds' => 30,
+        'totp_window_steps' => 1,
+        'recovery_code_count' => 8,
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Authentication Guards

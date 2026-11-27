@@ -1,6 +1,6 @@
 # School Management Portal API
 
-This folder documents the Laravel API currently present in this repository: authentication, role and permission administration, academy setup, system settings, audit logs, user invitations/administration, and an admissions workflow foundation. Route definitions and SQLite feature tests do not establish that an operation works against the current local MySQL database; the later administration and admissions migrations are still pending there. MFA and a user-facing school portal are not implemented.
+This folder documents the Laravel API currently present in this repository: authentication, role and permission administration, academy setup, system settings, audit logs, user invitations/administration, MFA, and an admissions workflow foundation. Route definitions and SQLite feature tests do not establish that an operation works against the current local MySQL database; the administration/admissions migrations and new MFA migration have not been verified there. A user-facing school portal is not implemented.
 
 ## Open the interactive documentation
 
@@ -22,9 +22,9 @@ Swagger UI loads its pinned assets from a public CDN, so the browser needs inter
 
 ## Authentication model
 
-The current implementation uses Sanctum's first-party session cookies. Login returns a public user resource and sets browser-managed cookies; it does **not** return a bearer access token. Call the CSRF-cookie endpoint before state-changing calls. Swagger UI handles the CSRF cookie/header in the browser; Postman instructions are in [the beginner guide](../testing/POSTMAN_BEGINNER_GUIDE.md).
+The current implementation uses Sanctum's first-party session cookies. A normal-role login returns a public user resource; a configured sensitive-role login returns a short-lived MFA challenge (`202`) until TOTP verification succeeds. Neither flow returns a bearer access token. Call the CSRF-cookie endpoint before state-changing calls. Swagger UI handles the CSRF cookie/header in the browser; Postman instructions are in [the beginner guide](../testing/POSTMAN_BEGINNER_GUIDE.md).
 
-Protected authentication operations require the logged-in session. Administrative APIs enforce their respective permission keys on the backend. Campus assignments are enforced for campus, room, intake, holiday, user, and admissions access where applicable. The first System Administrator is assigned to an existing active, verified account using the CLI-only `app:bootstrap-system-administrator` command; public registration cannot assign roles. MFA and the portal UI are not implemented. See [authentication details](authentication.md) and the [project status and live API verification report](../testing/PROJECT_STATUS_AND_LIVE_API_VERIFICATION.md).
+Protected authentication operations require the logged-in session and MFA proof for configured sensitive roles. Administrative APIs enforce their respective permission keys on the backend. Campus assignments are enforced for campus, room, intake, holiday, user, and admissions access where applicable. The first System Administrator is assigned to an existing active, verified account using the CLI-only `app:bootstrap-system-administrator` command; public registration cannot assign roles. MFA code is covered by SQLite tests, but its migration and live database flow are not yet verified. The portal UI is not implemented. See [authentication details](authentication.md) and the [project status and live API verification report](../testing/PROJECT_STATUS_AND_LIVE_API_VERIFICATION.md).
 
 ## Versioning and base URL
 

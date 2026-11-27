@@ -18,11 +18,14 @@ use App\Http\Controllers\Api\V1\Auth\AuthenticatedUserController;
 use App\Http\Controllers\Api\V1\Auth\EmailChangeVerificationController;
 use App\Http\Controllers\Api\V1\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\V1\Auth\InvitationController;
+use App\Http\Controllers\Api\V1\Auth\MfaController;
 use App\Http\Controllers\Api\V1\Auth\PasswordRecoveryController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\RegistrationController;
 use App\Http\Controllers\Api\V1\Auth\ResendVerificationController;
 use App\Http\Middleware\EnforceIdleSession;
+use App\Http\Middleware\EnsureAdmissionsPublicEnabled;
+use App\Http\Middleware\EnsureMfaVerified;
 use App\Http\Middleware\RequireHttps;
 use Illuminate\Support\Facades\Route;
 
@@ -39,7 +42,7 @@ Route::prefix('v1/auth')
     ->name('api.v1.auth.')
     ->group(function () {
         Route::post('/admissions/applications', [ApplicationController::class, 'publicStore'])
-            ->middleware(['throttle:10,1'])
+            ->middleware(['throttle:10,1', EnsureAdmissionsPublicEnabled::class])
             ->name('admissions.public.store');
 
         Route::get('/invitations/{user}/{token}', [InvitationController::class, 'show'])
@@ -71,7 +74,20 @@ Route::prefix('v1/auth')
             ->middleware('throttle:10,1')
             ->name('login');
 
-        Route::middleware(['auth:sanctum', EnforceIdleSession::class])->group(function () {
+        Route::post('/mfa/enrollment/start', [MfaController::class, 'startEnrollment'])
+            ->middleware('throttle:10,1')
+            ->name('mfa.enrollment.start');
+        Route::post('/mfa/enrollment/confirm', [MfaController::class, 'confirmEnrollment'])
+            ->middleware('throttle:10,1')
+            ->name('mfa.enrollment.confirm');
+        Route::post('/mfa/verify', [MfaController::class, 'verify'])
+            ->middleware('throttle:10,1')
+            ->name('mfa.verify');
+        Route::post('/mfa/recovery', [MfaController::class, 'verifyRecoveryCode'])
+            ->middleware('throttle:10,1')
+            ->name('mfa.recovery');
+
+        Route::middleware(['auth:sanctum', EnforceIdleSession::class, EnsureMfaVerified::class])->group(function () {
             Route::get('/user', AuthenticatedUserController::class)->name('user');
             Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
             Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -81,7 +97,7 @@ Route::prefix('v1/auth')
     });
 
 Route::prefix('v1/admin')
-    ->middleware([RequireHttps::class, 'auth:sanctum', EnforceIdleSession::class])
+    ->middleware([RequireHttps::class, 'auth:sanctum', EnforceIdleSession::class, EnsureMfaVerified::class])
     ->name('api.v1.admin.')
     ->group(function () {
         Route::get('/applications', [ApplicationController::class, 'index'])

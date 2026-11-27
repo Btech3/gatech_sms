@@ -328,6 +328,24 @@ class RoleManagementTest extends TestCase
         $this->assertFalse($administrator->hasPermission('Invoices.Approve'));
     }
 
+    public function test_bootstrap_administrator_is_not_granted_finance_module_permissions(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $bootstrapRole = Role::query()->where('is_bootstrap', true)->firstOrFail();
+        $paymentsRecord = Permission::query()->where('name', 'Payments.Record')->firstOrFail();
+        $bootstrapRole->permissions()->attach($paymentsRecord);
+        $this->assertDatabaseHas('permission_role', [
+            'role_id' => $bootstrapRole->id,
+            'permission_id' => $paymentsRecord->id,
+        ]);
+
+        $this->seed(RolePermissionSeeder::class);
+
+        $this->assertFalse($bootstrapRole->permissions()
+            ->whereIn('module', ['Payments', 'Invoices', 'Finance', 'Refunds', 'Discounts'])
+            ->exists());
+    }
+
     private function userWithRole(string $roleName): User
     {
         $user = User::factory()->create([

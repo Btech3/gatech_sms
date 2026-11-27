@@ -86,7 +86,6 @@ class ApplicationController extends Controller
         StoreApplicationRequest $request,
         ApplicationService $applications,
     ): JsonResponse {
-        abort_unless((bool) config('app.admissions_public_enabled', false), 404);
         $intake = Intake::query()->lockForUpdate()->findOrFail($request->integer('intake_id'));
         $actor = $this->publicActor();
         $attributes = $request->validated();

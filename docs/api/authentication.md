@@ -6,8 +6,8 @@ The backend uses Laravel Sanctum's **first-party SPA session-cookie** flow. It d
 
 1. Call `GET /api/v1/auth/csrf-cookie` to receive the session and XSRF cookies.
 2. Send `POST /api/v1/auth/login` with email and password, retaining the same cookie jar.
-3. The server returns the public user under `data` and rotates the session cookie.
-4. Send that cookie with protected calls. For state-changing calls, also send the URL-decoded `XSRF-TOKEN` cookie as `X-XSRF-TOKEN`.
+3. A normal-role login returns the public user under `data`. A configured sensitive-role login returns `202` with an MFA challenge and does not yet authenticate protected requests.
+4. For a sensitive role, enroll or verify TOTP as described under AUTH-003. After success, send the same cookie with protected calls. For state-changing calls, also send the URL-decoded `XSRF-TOKEN` cookie as `X-XSRF-TOKEN`.
 5. `POST /api/v1/auth/logout` invalidates the session; subsequent protected requests should return `401`.
 
 The default session cookie name is `laravel-session`; it can be changed with `SESSION_COOKIE`. Do not copy it into a bearer `Authorization` header.
@@ -35,7 +35,10 @@ The default session cookie name is `laravel-session`; it can be changed with `SE
 
 - Authenticated API requests enforce 30 minutes of inactivity and return `401` after expiry.
 - Logout invalidates the session server-side, so other tabs sharing that session should also lose access.
-- **MFA and five-attempt MFA lockout are not implemented.** There is no MFA endpoint, persistence model, or MFA test coverage.
+- Configured sensitive roles require an authenticator-app TOTP challenge before protected APIs are available. Defaults are `System Administrator`, `Academy Administrator`, `Registrar / Admissions Officer`, `Finance Officer`, and `Academy Head`; deployment owners can adjust the list with `AUTH_MFA_REQUIRED_ROLES`.
+- First-time sign-in returns `202`; `/api/v1/auth/mfa/enrollment/start` returns a five-minute setup secret and provisioning URI, and `/enrollment/confirm` enables MFA after a valid code. Eight recovery codes are shown once and stored as one-way hashes.
+- Returning sign-ins use `/api/v1/auth/mfa/verify`; one recovery code can be used once through `/api/v1/auth/mfa/recovery`. TOTP time-step replay is rejected. Five invalid codes trigger a 15-minute lock and `429` with `Retry-After`.
+- Missing or expired challenges return `401`. Sensitive API sessions without MFA proof are logged out. The migration and live MySQL/staging flow remain unverified; apply and test them only through the approved release process.
 
 ### AUTH-004 — Profile and logout
 

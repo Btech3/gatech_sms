@@ -125,4 +125,6 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    'admissions_public_enabled' => (bool) env('ADMISSIONS_PUBLIC_ENABLED', false),
+
 ];

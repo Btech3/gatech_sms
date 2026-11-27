@@ -1,0 +1,2521 @@
+openapi: 3.1.0
+info:
+  title: School Management Portal API
+  version: 1.0.0
+  summary: Version 1 authentication and administration API
+  description: |
+    The application uses Laravel Sanctum first-party session cookies. Login does
+    not issue a bearer token. Role and permission management are available through
+    protected administration endpoints. The initial System Administrator is
+    assigned only through the controlled Artisan bootstrap command. Campus
+    assignments are enforced for campus, room, intake, and holiday administration. User
+    administration, admissions, and MFA are not implemented yet.
+servers:
+  - url: /
+    description: Current host and scheme used to open Swagger UI
+tags:
+  - name: Session
+    description: CSRF bootstrap, login, current identity, and logout
+  - name: Registration
+    description: Public account creation and email verification
+  - name: Password recovery
+    description: Forgot-password and reset operations
+  - name: Profile
+    description: Authenticated profile, photo, and password operations
+  - name: Email change
+    description: Signed verification of a pending new email address
+  - name: Administration
+    description: Protected roles, permissions, academy setup, settings, and audit APIs
+paths:
+  /api/v1/admin/roles:
+    get:
+      tags: [Administration]
+      operationId: listRoles
+      summary: List roles
+      description: Requires the Roles.Manage permission. The response includes user counts and effective permission keys.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Paginated roles.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleCollectionEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Administration]
+      operationId: createRole
+      summary: Create a custom role with no permissions
+      description: Requires Roles.Manage. Privileged roles, user assignments, and permissions cannot be supplied in the request.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleCreateRequest'
+            example:
+              name: Attendance Reviewer
+              description: Can review attendance exceptions.
+      responses:
+        '201':
+          description: Custom role created without permissions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/roles/{role}:
+    parameters:
+      - $ref: '#/components/parameters/RoleId'
+    get:
+      tags: [Administration]
+      operationId: showRole
+      summary: Get a role
+      description: Requires Roles.Manage.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Role details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Administration]
+      operationId: updateRole
+      summary: Update a custom role's name or description
+      description: Requires Roles.Manage. Built-in roles cannot be renamed or edited through this operation.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleUpdateRequest'
+      responses:
+        '200':
+          description: Role updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Administration]
+      operationId: deleteRole
+      summary: Delete an unassigned custom role
+      description: Requires Roles.Manage. Deletion is blocked for built-in roles and roles assigned to users.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '204':
+          description: Role deleted.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/admin/roles/{role}/clone:
+    parameters:
+      - $ref: '#/components/parameters/RoleId'
+    post:
+      tags: [Administration]
+      operationId: cloneRole
+      summary: Clone a role
+      description: Requires Roles.Manage. A custom role is created with the source role's permissions, provided the actor is allowed to grant every copied permission.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleCreateRequest'
+            example:
+              name: Senior Registrar
+              description: Senior registrar responsibilities.
+      responses:
+        '201':
+          description: Role cloned with the source permissions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/permissions:
+    get:
+      tags: [Administration]
+      operationId: listPermissions
+      summary: Get the available permission matrix
+      description: Requires Permissions.Manage. The catalogue includes View, Create, Edit, Delete, Approve, and Export actions, plus workbook-defined specific actions.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Available modules and actions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionCatalogEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/admin/roles/{role}/permissions:
+    parameters:
+      - $ref: '#/components/parameters/RoleId'
+    get:
+      tags: [Administration]
+      operationId: showRolePermissionMatrix
+      summary: Get a role's permission matrix
+      description: Requires Permissions.Manage. Permission changes are read from the database on each request and take effect immediately.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Current permission matrix for the role.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolePermissionMatrixEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Administration]
+      operationId: updateRolePermissionMatrix
+      summary: Replace a role's permissions
+      description: Requires Permissions.Manage. Only permissions the actor already has may be granted, except by the bootstrap System Administrator. An empty array removes all permissions.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RolePermissionUpdateRequest'
+            example:
+              permissions:
+                - Dashboard.View
+                - Payments.View
+                - Reports.View
+      responses:
+        '200':
+          description: Updated role permission matrix.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolePermissionMatrixEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/academy-profile:
+    get:
+      tags: [Administration]
+      operationId: showAcademyProfile
+      summary: Read the academy profile
+      description: Requires Settings.Manage. Returns null profile data until the first profile update.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The academy profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Administration]
+      operationId: updateAcademyProfile
+      summary: Create or update academy branding
+      description: Requires Settings.Manage. Logo uploads must be PNG or JPG/JPEG, no larger than 2 MB. Changes are audited.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AcademyProfileRequest'
+      responses:
+        '200':
+          description: Profile saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/campuses:
+    get:
+      tags: [Administration]
+      operationId: listCampuses
+      summary: List campuses visible to the signed-in user
+      description: Requires Settings.Manage. Non-bootstrap administrators see only assigned campuses.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Paginated campuses.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceCollection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Administration]
+      operationId: createCampus
+      summary: Create a campus
+      description: Requires Settings.Manage. Non-bootstrap administrators are assigned to a campus they create.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampusCreateRequest'
+      responses:
+        '201':
+          description: Campus created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/campuses/{campus}:
+    parameters:
+      - name: campus
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      tags: [Administration]
+      operationId: showCampus
+      summary: Read a campus
+      description: Requires Settings.Manage and campus assignment, except for the bootstrap administrator.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Campus details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Administration]
+      operationId: updateCampus
+      summary: Update a campus
+      description: Requires Settings.Manage and campus assignment, except for the bootstrap administrator.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampusUpdateRequest'
+      responses:
+        '200':
+          description: Campus updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/campuses/{campus}/rooms:
+    parameters:
+      - name: campus
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags: [Administration]
+      operationId: listCampusRooms
+      summary: List rooms at a campus
+      description: Requires Settings.Manage and campus assignment.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Paginated rooms.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceCollection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Administration]
+      operationId: createCampusRoom
+      summary: Create a room at a campus
+      description: Requires Settings.Manage. A room with future sessions cannot be deactivated.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomCreateRequest'
+      responses:
+        '201':
+          description: Room created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/campuses/{campus}/rooms/{room}:
+    parameters:
+      - name: campus
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      tags: [Administration]
+      operationId: updateCampusRoom
+      summary: Update a room
+      description: Requires Settings.Manage and campus assignment. Returns 409 when deactivation would affect a future session.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomUpdateRequest'
+      responses:
+        '200':
+          description: Room updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/academic-sessions:
+    get:
+      tags: [Administration]
+      operationId: listAcademicSessions
+      summary: List academic sessions
+      description: Requires Settings.Manage.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Paginated academic sessions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceCollection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Administration]
+      operationId: createAcademicSession
+      summary: Create an academic session
+      description: Requires Settings.Manage. Date ranges cannot overlap; setting a session current clears the previous current flag.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcademicSessionCreateRequest'
+      responses:
+        '201':
+          description: Academic session created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/academic-sessions/{academic_session}:
+    parameters:
+      - name: academic_session
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      tags: [Administration]
+      operationId: updateAcademicSession
+      summary: Update an academic session
+      description: Requires Settings.Manage. Session dates still cannot overlap another session.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcademicSessionUpdateRequest'
+      responses:
+        '200':
+          description: Academic session updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/intakes:
+    get:
+      tags: [Administration]
+      operationId: listIntakes
+      summary: List intakes visible to the signed-in user
+      description: Requires Settings.Manage. Campus-specific intakes are limited to assigned campuses.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Paginated intakes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceCollection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Administration]
+      operationId: createIntake
+      summary: Create an intake
+      description: Requires Settings.Manage. Campus assignments are checked; application close must be after application open.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntakeCreateRequest'
+      responses:
+        '201':
+          description: Intake created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/intakes/{intake}:
+    parameters:
+      - name: intake
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      tags: [Administration]
+      operationId: updateIntake
+      summary: Update an intake
+      description: Requires Settings.Manage and access to its campus.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntakeUpdateRequest'
+      responses:
+        '200':
+          description: Intake updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/academic-holidays:
+    get:
+      tags: [Administration]
+      operationId: listAcademicHolidays
+      summary: List holidays visible to the signed-in user
+      description: Requires Settings.Manage; campus-specific entries are limited to assigned campuses.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Paginated holidays.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceCollection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Administration]
+      operationId: createAcademicHoliday
+      summary: Add an academic holiday
+      description: Requires Settings.Manage and access to the selected campus.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcademicHolidayRequest'
+      responses:
+        '201':
+          description: Holiday created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/departments:
+    get:
+      tags: [Administration]
+      operationId: listDepartments
+      summary: List departments
+      description: Requires Settings.Manage.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Paginated departments.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceCollection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Administration]
+      operationId: createDepartment
+      summary: Create a department
+      description: Requires Settings.Manage.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepartmentCreateRequest'
+      responses:
+        '201':
+          description: Department created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/departments/{department}:
+    parameters:
+      - name: department
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      tags: [Administration]
+      operationId: updateDepartment
+      summary: Update a department
+      description: Requires Settings.Manage.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepartmentUpdateRequest'
+      responses:
+        '200':
+          description: Department updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Administration]
+      operationId: deleteDepartment
+      summary: Delete an unused department
+      description: Requires Settings.Manage. Deletion returns 409 when courses or users still reference the department.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '204':
+          description: Department deleted.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/admin/settings:
+    get:
+      tags: [Administration]
+      operationId: listSystemSettings
+      summary: List supported system settings
+      description: Requires Settings.Manage. The response includes only documented, non-secret settings keys.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Paginated system settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceCollection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/admin/settings/{key}:
+    parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+          example: discount.approval_threshold_percent
+    get:
+      tags: [Administration]
+      operationId: showSystemSetting
+      summary: Read a supported system setting
+      description: Requires Settings.Manage.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Setting value.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Administration]
+      operationId: updateSystemSetting
+      summary: Update a supported system setting
+      description: Requires Settings.Manage. Values are validated by key and audited; audit retention defaults to 7 years. Unknown keys and secret values are not accepted.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemSettingRequest'
+      responses:
+        '200':
+          description: Setting updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/audit-logs:
+    get:
+      tags: [Administration]
+      operationId: listAuditLogs
+      summary: Search audit logs
+      description: Requires Audit.View. Supports user, module, action, entity, and date filters with 25/50/100-row pagination.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: user_id
+          in: query
+          schema:
+            type: integer
+        - name: module
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+        - name: entity_id
+          in: query
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            enum: [25, 50, 100]
+      responses:
+        '200':
+          description: Paginated audit entries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResourceCollection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/audit-logs/export:
+    get:
+      tags: [Administration]
+      operationId: exportAuditLogs
+      summary: Export filtered audit logs as CSV
+      description: Requires Audit.Export. The export action itself is written to the audit trail.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: A streamed CSV file.
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/admin/audit-logs/{auditLog}:
+    parameters:
+      - name: auditLog
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      tags: [Administration]
+      operationId: rejectAuditLogUpdate
+      summary: Reject an audit log update attempt
+      description: Requires Audit.View. Audit entries are immutable; the attempt is itself audited and returns 405.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '405':
+          description: Audit log entries are immutable.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags: [Administration]
+      operationId: rejectAuditLogPatch
+      summary: Reject an audit log patch attempt
+      description: Requires Audit.View. The attempt is logged and returns 405.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '405':
+          description: Audit log entries are immutable.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Administration]
+      operationId: rejectAuditLogDelete
+      summary: Reject an audit log deletion attempt
+      description: Requires Audit.View. The attempt is logged and returns 405.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '405':
+          description: Audit log entries are immutable.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/auth/csrf-cookie:
+    get:
+      tags: [Session]
+      operationId: getCsrfCookie
+      summary: Start a browser session and receive CSRF cookies
+      description: |
+        Call before state-changing requests in a first-party cookie session.
+        The browser stores the session and XSRF-TOKEN cookies automatically.
+      responses:
+        '204':
+          description: CSRF and session cookies were set.
+          headers:
+            Set-Cookie:
+              description: Laravel session and XSRF cookies; values are browser-managed.
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/register:
+    post:
+      tags: [Registration]
+      operationId: register
+      summary: Create a basic user account
+      description: |
+        Creates an inactive, unverified account and queues an email verification
+        notification. Queueing does not mean the email has been delivered; a
+        queue worker must process it. If the notification cannot be queued, the
+        account creation transaction is rolled back. Public input cannot set
+        roles, permissions, activation, or verification state. The local/testing
+        login bypass does not change the account state saved at registration.
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              first_name: Ada
+              last_name: Lovelace
+              email: ada@example.test
+              password: StrongPass123
+              password_confirmation: StrongPass123
+      responses:
+        '201':
+          description: Account created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/UserEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: Registration created. Verification email queued; account remains inactive until verified.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          description: The verification notification could not be queued.
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/login:
+    post:
+      tags: [Session]
+      operationId: login
+      summary: Sign in and establish a session
+      description: |
+        A successful request sets a Sanctum/web session cookie and returns the
+        public user resource. It does not return an access token. In local and
+        testing environments, the configured verification bypass may permit an
+        unverified account; production still requires email verification.
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: ada@example.test
+              password: StrongPass123
+      responses:
+        '200':
+          description: Signed in; the browser receives a session cookie.
+          headers:
+            Set-Cookie:
+              description: Browser-managed session cookie. No bearer token is returned.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+              example:
+                data:
+                  id: 12
+                  first_name: Ada
+                  last_name: Lovelace
+                  name: Ada Lovelace
+                  email: ada@example.test
+                  phone: null
+                  profile_photo_url: null
+                  email_change_pending: false
+        '422':
+          description: Invalid credentials, unverified account outside local/testing, or invalid input.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginError'
+              example:
+                message: The provided credentials are invalid.
+                status: false
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/user:
+    get:
+      tags: [Session]
+      operationId: getAuthenticatedUser
+      summary: Get the signed-in user's public identity
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Current authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/logout:
+    post:
+      tags: [Session]
+      operationId: logout
+      summary: End the current browser session
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      responses:
+        '204':
+          description: Session invalidated; no response body.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/email/verification-notification:
+    post:
+      tags: [Registration]
+      operationId: resendVerificationEmail
+      summary: Request an email verification notification
+      description: |
+        Returns the same accepted response for unknown addresses. When the
+        address is a pending email change, a signed email-change link is sent
+        to that pending address instead.
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailRequest'
+            example:
+              email: ada@example.test
+      responses:
+        '202':
+          description: A link may have been sent if the address belongs to an eligible account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: If the address belongs to an unverified account, a verification link will be sent.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/email/verify/{id}/{hash}:
+    get:
+      tags: [Registration]
+      operationId: verifyEmail
+      summary: Verify an account email using its signed link
+      description: |
+        Use the complete signed URL from the email. The URL also contains
+        `expires` and `signature` query values; do not remove or edit them.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Email verified and account activated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Email verified. Your account is now active.
+        '403':
+          $ref: '#/components/responses/InvalidSignedLink'
+        '404':
+          description: No user exists for the supplied identifier.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/password/forgot:
+    post:
+      tags: [Password recovery]
+      operationId: requestPasswordReset
+      summary: Request a password reset email
+      description: |
+        The same 202 response is returned for known and unknown addresses.
+        In the current local configuration, email is written to Laravel's log
+        unless SMTP is configured in the private environment file.
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailRequest'
+            example:
+              email: ada@example.test
+      responses:
+        '202':
+          description: Generic response that does not confirm whether the email exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: If the address is associated with an account, password reset instructions will be sent.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/password/reset:
+    post:
+      tags: [Password recovery]
+      operationId: resetPassword
+      summary: Set a new password with a reset token
+      description: |
+        Reset links expire after 30 minutes and are one-use. Successful reset
+        changes the remember token and deletes all database-backed sessions
+        for the account. The backend does not include the frontend reset form;
+        submit the token from the email/log to this endpoint.
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+            example:
+              email: ada@example.test
+              token: token-from-reset-email
+              password: NewStrong456
+              password_confirmation: NewStrong456
+      responses:
+        '200':
+          description: Password changed; the user must sign in again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Your password has been reset. Please sign in with your new password.
+        '422':
+          description: Validation failure, expired/invalid token, or password policy failure.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationErrorBody'
+                  - $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: The password reset link is invalid or expired.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/profile:
+    patch:
+      tags: [Profile]
+      operationId: updateProfile
+      summary: Update the signed-in user's profile
+      description: |
+        Send JSON for text fields or multipart/form-data when uploading a photo.
+        An email change is only pending until its signed verification link is
+        opened. The current email must already be verified before requesting a
+        change. No role, activation, or internal storage fields are accepted.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdateRequest'
+            example:
+              first_name: Ada
+              last_name: Lovelace
+              phone: "+1 555 0100"
+          multipart/form-data:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ProfileUpdateRequest'
+                - type: object
+                  properties:
+                    profile_photo:
+                      type: string
+                      format: binary
+      responses:
+        '200':
+          description: Profile updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileUpdateResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          description: Current email must be verified before requesting an email change.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/profile/photo:
+    get:
+      tags: [Profile]
+      operationId: getProfilePhoto
+      summary: Retrieve the signed-in user's private profile photo
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The user's stored photo.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          description: No profile photo is stored for the signed-in user.
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/password:
+    put:
+      tags: [Profile]
+      operationId: changePassword
+      summary: Change the signed-in user's password
+      description: |
+        Requires the current password and the new confirmed password. Other
+        database-backed sessions are invalidated; the current session is
+        regenerated and remains signed in.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+            example:
+              current_password: CurrentPass123
+              password: NewStrong456
+              password_confirmation: NewStrong456
+      responses:
+        '200':
+          description: Password changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Your password has been changed. Other active sessions have been signed out.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/email/change/verify/{id}/{hash}:
+    get:
+      tags: [Email change]
+      operationId: verifyEmailChange
+      summary: Confirm a pending new email address
+      description: |
+        Use the complete signed URL sent to the pending address. The URL
+        expires after 30 minutes and cannot be reused after a successful change.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: New email address verified and applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Your new email address has been verified.
+        '403':
+          $ref: '#/components/responses/InvalidSignedLink'
+        '404':
+          description: No user exists for the supplied identifier.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '400':
+          $ref: '#/components/responses/SecureTransportRequired'
+  /api/v1/auth/invitations/{user}/{token}:
+    get:
+      tags: [Registration]
+      operationId: showInvitation
+      summary: Check a 48-hour user invitation
+      parameters:
+        - name: user
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The invitation is valid.
+        '422':
+          description: The invitation is invalid or expired.
+  /api/v1/auth/invitations/accept:
+    post:
+      tags: [Registration]
+      operationId: acceptInvitation
+      summary: Accept an invitation and set the account password
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password, password_confirmation]
+              properties:
+                token:
+                  type: string
+                password:
+                  $ref: '#/components/schemas/StrongPassword'
+                password_confirmation:
+                  type: string
+      responses:
+        '200':
+          description: Invitation accepted and account activated.
+        '422':
+          description: Invalid, expired, or reused invitation.
+  /api/v1/auth/admissions/applications:
+    post:
+      tags: [Administration]
+      operationId: createPublicApplication
+      summary: Submit a public application when explicitly enabled
+      description: Disabled unless ADMISSIONS_PUBLIC_ENABLED=true. CAPTCHA and legal policy providers are deployment integrations.
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationCreateRequest'
+      responses:
+        '201':
+          description: Application created.
+        '404':
+          description: Public admissions are disabled.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/users:
+    get:
+      tags: [Administration]
+      operationId: listUsers
+      summary: List users visible to the actor
+      description: Requires Users.Manage. Non-bootstrap actors see only users assigned to accessible campuses.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Paginated users.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Administration]
+      operationId: inviteUser
+      summary: Invite a user with role and campus assignments
+      description: Requires Users.Manage. The protected System Administrator role cannot be assigned through this endpoint.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInviteRequest'
+      responses:
+        '201':
+          description: User and 48-hour invitation created.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/admin/users/{user}/invitation:
+    parameters:
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      tags: [Administration]
+      operationId: resendUserInvitation
+      description: Requires Users.Manage.
+      security:
+        - sessionCookie: []
+      responses:
+        '202':
+          description: Invitation notification queued.
+  /api/v1/admin/users/{user}/password-reset:
+    parameters:
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      tags: [Administration]
+      operationId: sendUserPasswordReset
+      description: Requires Users.Manage.
+      security:
+        - sessionCookie: []
+      responses:
+        '202':
+          description: Reset link requested.
+  /api/v1/admin/users/{user}/deactivate:
+    parameters:
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      tags: [Administration]
+      operationId: deactivateUser
+      description: Requires Users.Manage. The last System Administrator is protected.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: User deactivated and sessions invalidated.
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/admin/users/{user}:
+    parameters:
+      - name: user
+        in: path
+        required: true
+        schema:
+          type: integer
+    delete:
+      tags: [Administration]
+      operationId: deleteUser
+      description: Requires Users.Manage. The last System Administrator is protected.
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: User soft-deleted and sessions invalidated.
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/admin/applications:
+    get:
+      tags: [Administration]
+      operationId: listApplications
+      description: Requires Admissions.View and campus scope.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Paginated applications.
+    post:
+      tags: [Administration]
+      operationId: createApplication
+      description: Requires Admissions.Create and campus scope.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationCreateRequest'
+      responses:
+        '201':
+          description: Application created.
+  /api/v1/admin/applications/{application}:
+    parameters:
+      - name: application
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags: [Administration]
+      operationId: showApplication
+      description: Requires Admissions.View and campus scope.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Application details.
+  /api/v1/admin/applications/{application}/review:
+    parameters:
+      - name: application
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      tags: [Administration]
+      operationId: reviewApplication
+      description: Requires Admissions.Review.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Application review state changed.
+  /api/v1/admin/applications/{application}/decision:
+    parameters:
+      - name: application
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      tags: [Administration]
+      operationId: decideApplication
+      description: Requires Admissions.Decide. Accept is capacity constrained; reject requires a reason; waitlist requires FIFO position and expiry.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Decision applied.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/admin/applications/{application}/admit:
+    parameters:
+      - name: application
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      tags: [Administration]
+      operationId: admitApplication
+      description: Requires Admissions.Admit. Creates student, enrollment, and admission letter.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Application admitted.
+  /api/v1/admin/applications/{application}/withdraw:
+    parameters:
+      - name: application
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      tags: [Administration]
+      operationId: withdrawApplication
+      description: Requires Admissions.Manage.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Application withdrawn.
+  /api/v1/admin/applications/{application}/waitlist/promote:
+    parameters:
+      - name: application
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      tags: [Administration]
+      operationId: promoteWaitlistedApplication
+      description: Requires Admissions.Decide. Only the first FIFO waitlist entry can be promoted when capacity exists.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Waitlisted application accepted.
+        '409':
+          $ref: '#/components/responses/Conflict'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: laravel-session
+      description: |
+        Default Laravel session cookie name. Login sets it automatically in
+        the browser. The name can be changed through SESSION_COOKIE. Do not
+        treat it as a bearer token or paste it into an Authorization header.
+  parameters:
+    XsrfHeader:
+      name: X-XSRF-TOKEN
+      in: header
+      required: false
+      description: |
+        Required for state-changing requests made with the first-party session
+        cookie. Swagger UI reads the XSRF-TOKEN cookie and adds this header;
+        Postman users must send the URL-decoded cookie value themselves.
+      schema:
+        type: string
+    RoleId:
+      name: role
+      in: path
+      required: true
+      description: Numeric role identifier.
+      schema:
+        type: integer
+        minimum: 1
+    CampusId:
+      name: campus
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  schemas:
+    UserInviteRequest:
+      type: object
+      required: [first_name, last_name, email, role_ids]
+      properties:
+        first_name:
+          type: string
+          maxLength: 120
+        last_name:
+          type: string
+          maxLength: 120
+        email:
+          type: string
+          format: email
+        phone:
+          type: [string, 'null']
+        role_ids:
+          type: array
+          minItems: 1
+          items:
+            type: integer
+        campus_ids:
+          type: array
+          items:
+            type: integer
+    ApplicationCreateRequest:
+      type: object
+      required: [intake_id, first_name, last_name, email]
+      properties:
+        intake_id:
+          type: integer
+        course_id:
+          type: [integer, 'null']
+        first_name:
+          type: string
+          maxLength: 120
+        last_name:
+          type: string
+          maxLength: 120
+        email:
+          type: string
+          format: email
+        phone:
+          type: [string, 'null']
+        date_of_birth:
+          type: [string, 'null']
+          format: date
+        guardian_name:
+          type: [string, 'null']
+        guardian_phone:
+          type: [string, 'null']
+        submit:
+          type: boolean
+    AdminResourceEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: [object, 'null']
+          additionalProperties: true
+    AdminResourceCollection:
+      type: object
+      required: [data, links, meta]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        links:
+          type: object
+        meta:
+          type: object
+    AcademyProfileRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 180
+        logo:
+          type: string
+          format: binary
+          description: PNG or JPG/JPEG, maximum 2 MB.
+        address:
+          type: [string, 'null']
+        phone:
+          type: [string, 'null']
+        email:
+          type: [string, 'null']
+          format: email
+        registration_number:
+          type: [string, 'null']
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+        timezone:
+          type: string
+        date_format:
+          type: string
+          enum: [Y-m-d, d/m/Y, m/d/Y, 'd M Y']
+        letterhead:
+          type: [string, 'null']
+    CampusRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 150
+        address:
+          type: string
+        phone:
+          type: [string, 'null']
+        email:
+          type: [string, 'null']
+          format: email
+        is_active:
+          type: boolean
+    CampusCreateRequest:
+      allOf:
+        - $ref: '#/components/schemas/CampusRequest'
+        - type: object
+          required: [name, address]
+          properties:
+            is_active:
+              not: {}
+    CampusUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/CampusRequest'
+        - type: object
+          properties:
+            is_active:
+              type: boolean
+    RoomRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        capacity:
+          type: integer
+          minimum: 1
+        type:
+          type: string
+          enum: [classroom, lab, virtual]
+        status:
+          type: string
+          enum: [active, inactive]
+    RoomCreateRequest:
+      allOf:
+        - $ref: '#/components/schemas/RoomRequest'
+        - type: object
+          required: [name, capacity, type, status]
+    RoomUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/RoomRequest'
+    AcademicSessionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        starts_on:
+          type: string
+          format: date
+        ends_on:
+          type: string
+          format: date
+        is_current:
+          type: boolean
+        is_closed:
+          type: boolean
+    AcademicSessionCreateRequest:
+      allOf:
+        - $ref: '#/components/schemas/AcademicSessionRequest'
+        - type: object
+          required: [name, starts_on, ends_on]
+    AcademicSessionUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/AcademicSessionRequest'
+    IntakeRequest:
+      type: object
+      properties:
+        academic_session_id:
+          type: integer
+        course_id:
+          type: [integer, 'null']
+        campus_id:
+          type: [integer, 'null']
+        name:
+          type: string
+          maxLength: 120
+        starts_on:
+          type: string
+          format: date
+        applications_open_at:
+          type: string
+          format: date-time
+        applications_close_at:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+          minimum: 1
+        is_active:
+          type: boolean
+    IntakeCreateRequest:
+      allOf:
+        - $ref: '#/components/schemas/IntakeRequest'
+        - type: object
+          required: [academic_session_id, name, starts_on, applications_open_at, applications_close_at, capacity]
+    IntakeUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/IntakeRequest'
+    AcademicHolidayRequest:
+      type: object
+      required: [name, holiday_date]
+      properties:
+        academic_session_id:
+          type: [integer, 'null']
+        campus_id:
+          type: [integer, 'null']
+        name:
+          type: string
+          maxLength: 120
+        holiday_date:
+          type: string
+          format: date
+    DepartmentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: [string, 'null']
+        is_active:
+          type: boolean
+    DepartmentCreateRequest:
+      allOf:
+        - $ref: '#/components/schemas/DepartmentRequest'
+        - type: object
+          required: [name]
+    DepartmentUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/DepartmentRequest'
+    SystemSettingRequest:
+      type: object
+      required: [value]
+      properties:
+        value:
+          description: A value validated against the catalog for the selected key.
+          anyOf:
+            - type: string
+            - type: number
+            - type: integer
+            - type: boolean
+            - type: array
+              items: {}
+    AuditLog:
+      type: object
+      required: [id, module, action, entity_type, entity_id, created_at]
+      properties:
+        id:
+          type: integer
+        user:
+          type: [object, 'null']
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+        module:
+          type: string
+        action:
+          type: string
+        entity_type:
+          type: string
+        entity_id:
+          type: [integer, 'null']
+        before_values:
+          type: [object, 'null']
+          additionalProperties: true
+        after_values:
+          type: [object, 'null']
+          additionalProperties: true
+        ip_address:
+          type: [string, 'null']
+        user_agent:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
+    Role:
+      type: object
+      required: [id, name, description, is_system, users_count, permissions]
+      properties:
+        id:
+          type: integer
+          example: 3
+        name:
+          type: string
+          example: Senior Registrar
+        description:
+          type: [string, 'null']
+          example: Senior registrar responsibilities.
+        is_system:
+          type: boolean
+          description: Indicates a protected built-in role.
+        users_count:
+          type: integer
+          minimum: 0
+        permissions:
+          type: array
+          items:
+            type: string
+          example: [Admissions.View, Students.View]
+    RoleEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Role'
+    RoleCollectionEnvelope:
+      type: object
+      required: [data, links, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        links:
+          type: object
+        meta:
+          type: object
+    RoleCreateRequest:
+      type: object
+      required: [name]
+      description: is_system, is_bootstrap, permissions, and user_ids are prohibited.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: [string, 'null']
+          maxLength: 500
+    RoleUpdateRequest:
+      type: object
+      description: At least one of name or description should be supplied. Built-in roles are protected.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: [string, 'null']
+          maxLength: 500
+    RolePermissionUpdateRequest:
+      type: object
+      required: [permissions]
+      description: permissions may be an empty array to revoke every permission from the role.
+      properties:
+        permissions:
+          type: array
+          maxItems: 200
+          uniqueItems: true
+          items:
+            type: string
+            example: Payments.Record
+    PermissionAction:
+      type: object
+      required: [name, permission]
+      properties:
+        name:
+          type: string
+          example: Record
+        permission:
+          type: string
+          example: Payments.Record
+        granted:
+          type: boolean
+          description: Present in a role matrix response, omitted from the unassigned permission catalogue.
+    PermissionModule:
+      type: object
+      required: [name, actions]
+      properties:
+        name:
+          type: string
+          example: Payments
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionAction'
+    PermissionCatalogEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [modules]
+          properties:
+            modules:
+              type: array
+              items:
+                $ref: '#/components/schemas/PermissionModule'
+    RolePermissionMatrixEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [role, modules]
+          properties:
+            role:
+              type: object
+              required: [id, name]
+              properties:
+                id:
+                  type: integer
+                name:
+                  type: string
+            modules:
+              type: array
+              items:
+                $ref: '#/components/schemas/PermissionModule'
+    User:
+      type: object
+      required: [id, first_name, last_name, name, email, phone, profile_photo_url, email_change_pending]
+      properties:
+        id:
+          type: integer
+          example: 12
+        first_name:
+          type: [string, 'null']
+          example: Ada
+        last_name:
+          type: [string, 'null']
+          example: Lovelace
+        name:
+          type: string
+          example: Ada Lovelace
+        email:
+          type: string
+          format: email
+          example: ada@example.test
+        phone:
+          type: [string, 'null']
+          example: "+1 555 0100"
+        profile_photo_url:
+          type: [string, 'null']
+          format: uri
+          example: http://127.0.0.1:8010/api/v1/auth/profile/photo
+        email_change_pending:
+          type: boolean
+          example: false
+    UserEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/User'
+    ProfileUpdateResponse:
+      allOf:
+        - $ref: '#/components/schemas/UserEnvelope'
+        - type: object
+          required: [message]
+          properties:
+            message:
+              type: string
+              examples:
+                - Profile updated.
+                - Profile updated. Verify the new email address to apply the change.
+    RegisterRequest:
+      type: object
+      description: Role, role_id, is_admin, permissions, is_active, and email_verified_at are prohibited.
+      required: [first_name, last_name, email, password, password_confirmation]
+      properties:
+        first_name:
+          type: string
+          maxLength: 120
+        last_name:
+          type: string
+          maxLength: 120
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          $ref: '#/components/schemas/StrongPassword'
+        password_confirmation:
+          type: string
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          maxLength: 255
+    EmailRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+    PasswordResetRequest:
+      type: object
+      required: [email, token, password, password_confirmation]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        token:
+          type: string
+        password:
+          $ref: '#/components/schemas/StrongPassword'
+        password_confirmation:
+          type: string
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, password, password_confirmation]
+      properties:
+        current_password:
+          type: string
+        password:
+          $ref: '#/components/schemas/StrongPassword'
+        password_confirmation:
+          type: string
+    ProfileUpdateRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+          maxLength: 120
+        last_name:
+          type: string
+          maxLength: 120
+        phone:
+          type: [string, 'null']
+          maxLength: 30
+        email:
+          type: string
+          format: email
+          maxLength: 255
+    StrongPassword:
+      type: string
+      minLength: 8
+      maxLength: 255
+      format: password
+      description: At least 8 characters, including uppercase, lowercase, and a number.
+      example: StrongPass123
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+    LoginError:
+      type: object
+      required: [message, status]
+      properties:
+        message:
+          type: string
+          example: The provided credentials are invalid.
+        status:
+          type: boolean
+          example: false
+    ValidationErrorBody:
+      type: object
+      required: [message, errors]
+      properties:
+        message:
+          type: string
+          example: The email field is required.
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    RateLimitBody:
+      type: object
+      properties:
+        message:
+          type: string
+        status:
+          type: boolean
+    SecureTransportBody:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: Secure transport is required.
+  responses:
+    Unauthenticated:
+      description: Authentication is required or the session has expired.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageResponse'
+          example:
+            message: Unauthenticated.
+    Forbidden:
+      description: Authentication succeeded, but the account lacks the required permission.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageResponse'
+          example:
+            message: You do not have permission to perform this action.
+    Conflict:
+      description: The requested role change conflicts with a protected or assigned role.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageResponse'
+          example:
+            message: This role is assigned to 2 user(s) and cannot be deleted.
+    NotFound:
+      description: The requested role does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageResponse'
+          example:
+            message: Not Found.
+    ValidationError:
+      description: The request failed backend validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorBody'
+          example:
+            message: The email field is required.
+            errors:
+              email:
+                - The email field is required.
+    RateLimited:
+      description: Request throttled or account temporarily locked. Login lockout includes Retry-After.
+      headers:
+        Retry-After:
+          description: Seconds until another attempt is allowed, when supplied.
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RateLimitBody'
+          example:
+            message: Too many login attempts. Please try again later.
+            status: false
+    InvalidSignedLink:
+      description: The signature is invalid/expired or the email hash does not match.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageResponse'
+          example:
+            message: The email verification link is invalid.
+    SecureTransportRequired:
+      description: Production requests must use HTTPS.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SecureTransportBody'
+          example:
+            message: Secure transport is required.

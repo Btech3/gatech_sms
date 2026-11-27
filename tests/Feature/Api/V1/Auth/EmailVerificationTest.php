@@ -3,7 +3,7 @@
 namespace Tests\Feature\Api\V1\Auth;
 
 use App\Models\User;
-use Illuminate\Auth\Notifications\VerifyEmail;
+use App\Notifications\Auth\QueuedVerifyEmail;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\URL;
@@ -56,7 +56,7 @@ final class EmailVerificationTest extends TestCase
             ])->assertCreated();
 
         $user = User::query()->where('email', 'grace@example.test')->firstOrFail();
-        $notification = Notification::sent($user, VerifyEmail::class)->first();
+        $notification = Notification::sent($user, QueuedVerifyEmail::class)->first();
         $verificationUrl = $notification->toMail($user)->actionUrl;
 
         $this->withHeaders($spaHeaders)
@@ -99,7 +99,7 @@ final class EmailVerificationTest extends TestCase
                 'If the address belongs to an unverified account, a verification link will be sent.',
             );
 
-        Notification::assertSentTo($user, VerifyEmail::class);
+        Notification::assertSentTo($user, QueuedVerifyEmail::class);
     }
 
     public function test_resend_endpoint_returns_the_same_response_for_an_unknown_email(): void

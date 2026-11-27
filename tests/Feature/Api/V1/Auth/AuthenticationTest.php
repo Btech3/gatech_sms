@@ -217,6 +217,13 @@ class AuthenticationTest extends TestCase
             ->assertUnauthorized();
     }
 
+    public function test_current_user_endpoint_returns_json_401_without_an_accept_header(): void
+    {
+        $this->get('/api/v1/auth/user')
+            ->assertUnauthorized()
+            ->assertJsonPath('message', 'Unauthenticated.');
+    }
+
     public function test_logout_invalidates_the_session(): void
     {
         $user = User::factory()->create([

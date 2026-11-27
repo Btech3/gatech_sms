@@ -40,6 +40,8 @@ class RegistrationController extends Controller
                     'is_active' => false,
                     'email_verified_at' => null,
                 ])->save();
+
+                event(new Registered($user));
             }
 
             return [$user, $user->wasRecentlyCreated];
@@ -51,11 +53,9 @@ class RegistrationController extends Controller
             ]);
         }
 
-        event(new Registered($user));
-
         return UserResource::make($user)
             ->additional([
-                'message' => 'Registration created. Verify your email to activate your account.',
+                'message' => 'Registration created. Verification email queued; account remains inactive until verified.',
             ])
             ->response()
             ->setStatusCode(201);
